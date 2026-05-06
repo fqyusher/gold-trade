@@ -193,9 +193,15 @@ def execute_trade(order_type, tf_name, signal_mode):
     tp = round(price + TP_USD, info.digits) if order_type == 0 else round(price - TP_USD, info.digits)
 
     request = {
-        "action": mt5.TRADE_ACTION_DEAL, "symbol": SYMBOL, "volume": VOLUME,
-        "type": order_type, "price": price, "sl": sl, "tp": tp,
-        "magic": MAGIC_NUMBER, "comment": current_comment,
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": SYMBOL,
+        "volume": VOLUME,
+        "type": order_type,
+        "price": price,
+        "sl": sl,
+        "tp": tp,
+        "magic": MAGIC_NUMBER,
+        "comment": current_comment,
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
 
@@ -204,7 +210,30 @@ def execute_trade(order_type, tf_name, signal_mode):
     if res.retcode == mt5.TRADE_RETCODE_DONE:
         side = 'BUY' if order_type == 0 else 'SELL'
         print(f"\n✅ 交易成交: #{res.order} | 方向:{side} | 价格:{price} | 模式:{current_comment}")
-        send_email_notification(f"成交通知: {side} {SYMBOL}", f"周期:{tf_name}\n模式:{signal_mode}\n价格:{price}\n止损:{sl}")
+        # 实时拉取最新仓位情况（安全避免未定义变量）
+        all_pos = mt5.positions_get(symbol=SYMBOL, magic=MAGIC_NUMBER)
+        total_pnl = sum([p.profit for p in all_pos]) if all_pos else 0.0
+        email_content = f"""
+        【交易详情】
+        ---------------------------
+        成交时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        交易品种: {SYMBOL}
+        交易方向: {side}
+        监控周期: {tf_name}
+        成交价格: {price}
+        下单模式: {signal_mode}
+        
+        【风控参数】
+        止损 (SL): {sl}
+        止盈 (TP): {tp}
+        交易量: {VOLUME}
+        
+        【账户概况】
+        当前持仓数: {len(all_pos)}
+        当前累计浮盈: {total_pnl:.2f}
+        ---------------------------
+        """
+        send_email_notification(f"【交易提醒】: {side}-{tf_name}周期", email_content)
     else:
         print(f"  [ERROR] 下单失败: {res.comment} (代码:{res.retcode})")
 
@@ -229,7 +258,7 @@ def run_loop():
             print(f"  [OK] {name} 周期时间已对齐: {last_processed_times[name]}")
     print("=" * 60)
     last_heartbeat = datetime.now()
-    send_email_heartbeat(f"x系统监控开始")
+    # send_email_heartbeat(f"x系统监控开始")
     # execute_trade(mt5.ORDER_TYPE_BUY, "test", "test")
 
     try:
