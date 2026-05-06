@@ -39,6 +39,28 @@ MONITOR_TFS = {
 
 # ================= 核心功能函数 =================
 
+def send_email_heartbeat(content):
+    """发送邮件提醒"""
+    try:
+        msg = MIMEText(content)
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = RECEIVER_EMAIL
+        msg['Subject'] = "交易机器人心跳监控"
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
+            server.starttls()
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.send_message(msg)
+        print(f"  [MAIL] 邮件心跳发送成功 {RECEIVER_EMAIL}")
+        # msg.attach(MIMEText(content, 'plain'))
+        # server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        # server.starttls()
+        # server.login(EMAIL_USER, EMAIL_PASS)
+        # server.sendmail(EMAIL_USER, EMAIL_TO, msg.as_string())
+        # server.quit()
+        # print(f"\n[♥ 邮件心跳发送成功] {datetime.now().strftime('%H:%M:%S')}")
+    except Exception as e:
+        print(f"\n[!] 邮件发送失败: {e}")
+
 def send_email_notification(subject, content):
     """发送邮件通知"""
     if not EMAIL_NOTIFY: return
@@ -193,6 +215,7 @@ def run_loop():
         print("CRITICAL: MT5 初始化失败")
         return
 
+    # send_email_notification("test", "test")
     print("=" * 60)
     print(f"🤖 系统启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"监控品种: {SYMBOL} | 止损/止盈: ${SL_USD}/${TP_USD}")
@@ -205,10 +228,18 @@ def run_loop():
             last_processed_times[name] = df.iloc[-1]['time']
             print(f"  [OK] {name} 周期时间已对齐: {last_processed_times[name]}")
     print("=" * 60)
+    last_heartbeat = datetime.now()
+    send_email_heartbeat(f"x系统监控开始")
+    # execute_trade(mt5.ORDER_TYPE_BUY, "test", "test")
 
     try:
         while True:
             manage_trailing_logic()
+            # 心跳检测 (30分钟)
+            if (datetime.now() - last_heartbeat).total_seconds() >= 1800:
+                pos_info = len(mt5.positions_get(symbol=SYMBOL, magic=MAGIC_NUMBER) or [])
+                send_email_heartbeat(f"系统运行正常\n当前持仓: {pos_info}\n运行时间: {datetime.now()}")
+                last_heartbeat = datetime.now()
 
             rsi_report = []
             for name, tf_code in MONITOR_TFS.items():
